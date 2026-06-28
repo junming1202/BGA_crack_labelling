@@ -189,11 +189,58 @@ Populate `LLM_GATEWAY_KEY` in the existing `.env` file at the project root befor
   - **Results:** 2 077 balls ✅ · 63 × 77 grid ✅ · 800 µm pitch ✅ · 0 missing values ✅ · X symmetry ✅
   - Grid scatter plots (top-down and bottom-view orientations) generated and verified visually.
 
-- [x] **3.2 `02_image_registration.ipynb`** *(all 5 images PASS)*
+- [~] **3.2 `02_image_registration.ipynb`** *(⚠️ NEEDS REWORK — see 3.2c)*
   Load one image. Detect ball centres (Hough circles). Match to transformed coordinates. Compute and display the affine transform. Report RMSE.
-  - **Results:** RMSE 1.70–4.44 px (mean 3.38 px) across all 5 images ✅
-  - Scale ~0.203–0.222 px/µm; rotation < 1°; pitch ~162–164 px.
-  - 3-round pipeline: coarse Hough → coarse RANSAC affine → centroid blob refinement → final RANSAC.
+  - 3-round pipeline implemented: coarse Hough → coarse RANSAC affine → centroid blob refinement → final RANSAC.
+  - ~~**Results:** RMSE 1.70–4.44 px (mean 3.38 px) across all 5 images~~ **← this metric is NOT trustworthy.**
+  - **Validation (3.2b) showed the reported RMSE is misleading.** It is computed on only 9–25 final
+    RANSAC inliers, several of which are **not solder balls** — the centroid-refinement step latches
+    onto bright dye stains in the margins and onto solder bridges, then the affine overfits to that
+    tiny, partly-spurious set. Independent full-field measurement gives a true residual of **~35 px
+    median** (best-possible affine on clean full-field points still ~37 px RMSE), an order of magnitude
+    worse than the headline number. See 3.2c for root cause and rework plan.
+
+- [x] **3.2b Registration validation (extended `02_image_registration.ipynb`)** *(implemented; surfaced the 3.2 defect)*
+  RMSE alone is an *internal consistency* metric on the RANSAC inlier subset. It does **not** catch
+  systematic failures: an off-by-one-pitch grid shift, a mirror / 180° rotation ambiguity (the grid is
+  near-symmetric), poor accuracy on edge balls (untested by inlier RMSE), or overfitting. Five
+  independent checks added (§7 of the notebook), each with an explicit pass/fail gate:
+  - [x] **V1 — Annotated overlay (primary human check).** Draws all predicted centres + sparse IDs +
+    corner markers on each full-res image; saves to `output/overlays/`. **Outcome:** high-res zoom
+    confirmed predicted dots are systematically off-ball and a "trusted inlier" sits on a dye blob in
+    the left margin → registration is not accurate.
+  - [x] **V2 — Reverse-projection residual on ALL detected circles.** Projects every Hough circle
+    through M⁻¹ to coord space, snaps to nearest grid node, reports fraction within 0.15 × pitch.
+    *Gate:* ≥ 95 %. **Outcome: FAIL — only 5–9 % within tolerance.** (Partly because raw Hough output
+    is noisy/spurious, but combined with V1/independent test it confirms poor registration.)
+  - [x] **V3 — Held-out cross-validation.** Refits affine on random 70 % of refined pairs, RMSE on 30 %.
+    *Gate:* held-out RMSE < 5 px and within ~2 px of in-sample. **Outcome: FAIL — held-out RMSE
+    29–108 px**, confirming the fit is overfit to a handful of points and does not generalise.
+  - [x] **V4 — Landmark / quadrant check.** Confirms the four extreme corner balls map to the correct
+    image quadrants. *Gate:* all corners in expected quadrant. **Outcome: PASS (5/5)** — orientation /
+    mirror is correct; the problem is fine positional accuracy, not a flip.
+  - [x] **V5 — Cross-image consistency.** Scale/rotation per image vs. median. *Gate:* scale within
+    ±10 %, rotation within ±1°. **Outcome: PASS (5/5)** — consistent, but note this only shows the five
+    fits are *similar*, not that any is *correct*.
+
+- [ ] **3.2c Registration REWORK (investigate & rebuild — chosen direction, not yet started)**
+  The current centroid-based pipeline cannot be trusted. Root causes identified during 3.2b:
+  1. **No reliable fiducial.** Centroid refinement keys off bright blobs; dye stains and margin debris
+     produce false "ball" centres that then anchor the affine.
+  2. **Dog-bone / bridged pads.** Many pads in this package are dumbbell-shaped (two pads joined by a
+     solder bridge — visible in central crops). Their blob centroid is *not* the ball centre, corrupting
+     both refinement and any centroid-based validation.
+  3. **Overfitting to a tiny inlier set.** Final RMSE on 9–25 points hides large field-wide error.
+  Investigation directions to explore (decide approach before coding):
+  - Fit a **regular lattice / grid model** to robustly-detected ball centres (the array is a known
+    63 × 77 grid at 800 µm pitch) rather than per-point nearest-neighbour matching — exploit global
+    grid regularity to reject outliers.
+  - **Template matching** on a clean ball/pad template instead of intensity centroids, with explicit
+    handling of bridged dog-bone pads.
+  - Establish a **trustworthy accuracy measure**: a small set of hand-verified ball centres spread
+    across the field as ground-truth control points (independent of the fitting set).
+  - Re-estimate the affine (or higher-order model if lens distortion is present) on a **large,
+    well-spread, verified** point set; re-run all 3.2b gates and require V2 + V3 to PASS.
 
 - [ ] **3.3 `03_roi_extraction.ipynb`**
   Using the registration from notebook 02, crop ROIs for a sample of balls. Display a grid of crops to visually verify alignment.
@@ -216,10 +263,22 @@ Populate `LLM_GATEWAY_KEY` in the existing `.env` file at the project root befor
   - Missing values: **0** ✅
   - Scatter plots confirmed correct grid pattern and mirror orientation ✅
 
-- [x] **4.2 Registration quality check (notebook 02)** *(all passed)*
-  - RMSE: 3.98, 3.06, 1.70, 3.71, 4.44 px across the 5 images — all < 5 px gate ✅
-  - All 5 interior spot-check balls (Y9, C25, R15, G40, P20) mapped within image bounds ✅
-  - Note: Hough detects 709–937 circles per image (not 2 077); edge and partially-fused balls are clipped — handled as boundary cases in ROI extraction (notebook 03).
+- [~] **4.2 Registration quality check (notebook 02)** *(⚠️ SUPERSEDED — RMSE gate alone is unreliable)*
+  - ~~RMSE: 3.98, 3.06, 1.70, 3.71, 4.44 px — all < 5 px gate~~ — **do not rely on this.** The RMSE is
+    computed on 9–25 overfit inliers (some on dye blobs, not balls). True field residual ~35 px median.
+  - Spot-check balls map *within image bounds*, but not to *accurate* positions.
+  - Note: Hough detects 709–937 circles per image (not 2 077); raw Hough output is noisy and includes
+    spurious detections — this is one reason centroid refinement was added (and where it went wrong).
+  - **Replaced by the 4.2b gate suite; registration must pass V2 + V3 after the 3.2c rework.**
+
+- [~] **4.2b Registration validation gates (notebook 02, from Step 3.2b)** *(run; current registration FAILS)*
+  - V1 — Overlay reviewed: predicted dots systematically off-ball; an inlier sits on a dye blob ❌
+  - V2 — ≥ 95 % of detected circles within 0.15 × pitch of a grid node → **5–9 % only** ❌
+  - V3 — Held-out (30 %) RMSE < 5 px and close to in-sample → **29–108 px** ❌
+  - V4 — Corner balls land in the expected image quadrant → all 5 images ✅
+  - V5 — Per-image scale within ±10 % and rotation within ±1° of the median → all 5 images ✅
+  - **Verdict:** orientation is correct (V4/V5) but fine positional accuracy is not (V1/V2/V3).
+    Gate to clear after 3.2c rework: **V1–V3 must all PASS** before notebook 03 can be trusted.
 
 - [ ] **4.3 ROI alignment spot-check (notebook 03)**
   - Visually inspect a random sample of 20 crops and confirm each is centred on a solder ball.

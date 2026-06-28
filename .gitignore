@@ -29,6 +29,9 @@ build/
 # (kept out of version control; re-generate from notebooks)
 **/output/*_BGA_label_output.xlsx
 
+# ── Generated validation artefacts (re-generate from notebook 02) ────────────
+**/output/overlays/
+
 # ── OS artefacts ──────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
