@@ -32,6 +32,7 @@ build/
 # ── Generated validation artefacts (re-generate from notebooks) ──────────────
 **/output/overlays/
 **/output/rois/
+**/output/segmentation_overlays/
 
 # ── Local Claude Code state (per-machine; not shared) ────────────────────────
 .claude/settings.local.json
