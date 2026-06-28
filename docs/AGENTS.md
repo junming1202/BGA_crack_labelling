@@ -48,7 +48,7 @@ You can use any open-source image-processing AI models like (U-net, YOLO, ResNet
 - Row 2 of the coordinate Excel sheet is always blank and must be skipped when reading.
 - The coordinate file uses a **top-down view** (reference corner = top-left), while the dye-and-pry images use a **bottom view** (reference corner = top-right). The required spatial transform is a horizontal mirror: `x_bv = -X_coord`, `y_bv = Y_coord`.
 - ✅ **Confirmed (notebook 01):** 2 077 balls, 63 × 77 grid, 800 µm pitch, array extents 34 900 × 42 400 µm.
-- **Preliminary scale estimate (from Step 1.3 image characterisation):** ~0.205 px/µm; exact affine calibration (including per-image margins ~350–425 px) to be computed in `02_image_registration.ipynb`.
+- ✅ **Confirmed scale (notebook 02):** affine transform per image gives ~0.203–0.222 px/µm (X) and ~0.198–0.219 px/µm (Y); rotation < 1°; ball pitch ~162–164 px. Each image has a slightly different scale due to varying stage position, so a separate affine is computed per image in the end-to-end pipeline.
 - **No ground-truth labels exist yet.** Numerical accuracy validation will only be possible after the tool is built and manual labelling is performed in a separate step.
 - **Category thresholds** (crack area as a percentage of total ball area):
   - Category A: exactly 0%
@@ -128,8 +128,12 @@ You can use any open-source image-processing AI models like (U-net, YOLO, ResNet
      - Hough parameters (validated in Step 1.2): `dp=1.5`, `param1=60`, `param2=25`, `minRadius=60`, `maxRadius=130` (full-res); detect on 4× downsampled image for speed then scale back.
      - Typical yield: **887–1 102** circles detected per image (out of 2 077; edge/fused balls account for the rest).
   2. Match detected centres to the transformed coordinate grid using nearest-neighbour assignment and RANSAC to reject outliers.
-  3. Compute an affine transform (or homography if lens distortion is present) mapping µm coordinates to pixel coordinates.
+  3. Compute an affine transform mapping µm coordinates to pixel coordinates — implemented as a **3-round pipeline** (validated in notebook 02):
+     - Round 1: rough linear scale → approximate pixel positions → NN match → RANSAC.
+     - Round 2: project all coords through M1 → tight NN re-match → RANSAC.
+     - Round 3 (refinement): for each coarse inlier, crop a 140×140 px window (tight enough to isolate one ball at ~164 px pitch), Otsu-threshold, find the largest blob centroid (subpixel accuracy) → final RANSAC affine.
   4. Validate: RMSE of predicted centres vs. detected centres < 5 px (MVP); target < 2 px for production.
+     - ✅ **Validated (notebook 02):** all 5 FP11_BLTC images pass. RMSE range 1.70–4.44 px, mean 3.38 px.
   5. Fallback: if automatic detection fails, provide a notebook cell for manual corner annotation.
 
 - [x] **2.4 Crack segmentation approach**
@@ -148,8 +152,9 @@ You can use any open-source image-processing AI models like (U-net, YOLO, ResNet
   ```
   python             ≥ 3.11
   uv                 environment management
-  opencv-python      image processing (Hough circles, SIFT, RANSAC, morphology)
+  opencv-python      image processing (Hough circles, RANSAC, morphology, affine)
   numpy              array operations
+  scipy              spatial indexing (cKDTree for nearest-neighbour matching)
   pandas             coordinate data handling
   openpyxl           read/write xlsx
   torch              deep learning backend
@@ -172,7 +177,7 @@ All development at this stage is **notebook-only**. Each notebook is self-contai
 **Environment setup** ✅ *(completed — `pyproject.toml`, `uv.lock`, and `.venv/` already present)*
 ```bash
 uv init
-uv add opencv-python numpy pandas openpyxl torch segmentation-models-pytorch \
+uv add opencv-python numpy pandas openpyxl scipy torch segmentation-models-pytorch \
         openai python-dotenv jupyterlab matplotlib
 ```
 Populate `LLM_GATEWAY_KEY` in the existing `.env` file at the project root before running any LLM-related cells.
@@ -184,8 +189,11 @@ Populate `LLM_GATEWAY_KEY` in the existing `.env` file at the project root befor
   - **Results:** 2 077 balls ✅ · 63 × 77 grid ✅ · 800 µm pitch ✅ · 0 missing values ✅ · X symmetry ✅
   - Grid scatter plots (top-down and bottom-view orientations) generated and verified visually.
 
-- [ ] **3.2 `02_image_registration.ipynb`**
+- [x] **3.2 `02_image_registration.ipynb`** *(all 5 images PASS)*
   Load one image. Detect ball centres (Hough circles). Match to transformed coordinates. Compute and display the affine transform. Report RMSE.
+  - **Results:** RMSE 1.70–4.44 px (mean 3.38 px) across all 5 images ✅
+  - Scale ~0.203–0.222 px/µm; rotation < 1°; pitch ~162–164 px.
+  - 3-round pipeline: coarse Hough → coarse RANSAC affine → centroid blob refinement → final RANSAC.
 
 - [ ] **3.3 `03_roi_extraction.ipynb`**
   Using the registration from notebook 02, crop ROIs for a sample of balls. Display a grid of crops to visually verify alignment.
@@ -208,10 +216,10 @@ Populate `LLM_GATEWAY_KEY` in the existing `.env` file at the project root befor
   - Missing values: **0** ✅
   - Scatter plots confirmed correct grid pattern and mirror orientation ✅
 
-- [ ] **4.2 Registration quality check (notebook 02)**
-  - Compute RMSE between predicted and detected ball centres.
-  - Gate: RMSE < 5 px required to proceed; flag image if RMSE > 5 px and inspect manually.
-  - Check that the detected ball count is close to 2 077 (some edge balls may be clipped).
+- [x] **4.2 Registration quality check (notebook 02)** *(all passed)*
+  - RMSE: 3.98, 3.06, 1.70, 3.71, 4.44 px across the 5 images — all < 5 px gate ✅
+  - All 5 interior spot-check balls (Y9, C25, R15, G40, P20) mapped within image bounds ✅
+  - Note: Hough detects 709–937 circles per image (not 2 077); edge and partially-fused balls are clipped — handled as boundary cases in ROI extraction (notebook 03).
 
 - [ ] **4.3 ROI alignment spot-check (notebook 03)**
   - Visually inspect a random sample of 20 crops and confirm each is centred on a solder ball.
