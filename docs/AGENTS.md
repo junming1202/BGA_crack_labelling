@@ -210,8 +210,10 @@ Populate `LLM_GATEWAY_KEY` in the existing `.env` file at the project root befor
   Five independent checks, each with an explicit pass/fail gate. This suite caught the original
   pipeline's false-positive RMSE and now confirms the reworked registration.
   - [x] **V1 — Annotated overlay (primary human check).** All predicted centres + sparse IDs + corner
-    markers drawn on each full-res image, saved to `output/overlays/`. **Outcome: PASS** — green dots
-    sit centred on ball discs across centre, edges, and corners (originally caught dots off-ball).
+    markers drawn on each full-res image, saved to `output/overlays/`. **Outcome: PASS — human-verified
+    2026-06-28:** the project owner reviewed every overlay in `output/overlays/` and confirmed the
+    registered coordinates are correct on all 5 images. Green dots sit centred on ball discs across
+    centre, edges, and corners (originally caught dots off-ball).
   - [x] **V2 — Reverse-projection of ALL detected discs.** Each disc projected through M⁻¹, snapped to
     nearest grid node. *Gate:* ≥ 95 % within 0.15 × pitch. **Outcome: PASS — 99.0–100 %** (was 5–9 %).
   - [x] **V3 — Held-out cross-validation.** Refit on random 70 % of the ~1800 control points, RMSE on
@@ -268,7 +270,7 @@ Populate `LLM_GATEWAY_KEY` in the existing `.env` file at the project root befor
   - ~1900–2055 robust disc control points per image (was 9–25 overfit points).
 
 - [x] **4.2b Registration validation gates (notebook 02 §7)** *(all PASS after 3.2c rework)*
-  - V1 — Overlay reviewed: green predicted dots centred on ball discs across the whole field ✅
+  - V1 — Overlay **human-verified by project owner (2026-06-28)**: coordinates correct on all 5 images ✅
   - V2 — detected discs within 0.15 × pitch of a grid node → **99.0–100 %** (was 5–9 %) ✅
   - V3 — held-out RMSE close to in-sample → **5.1–7.2 px vs 4.5–5.7 px** (was 29–108 px) ✅
   - V4 — corner balls land in the expected image quadrant → all 5 images ✅
