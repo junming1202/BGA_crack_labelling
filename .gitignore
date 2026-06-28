@@ -32,6 +32,9 @@ build/
 # ── Generated validation artefacts (re-generate from notebook 02) ────────────
 **/output/overlays/
 
+# ── Local Claude Code state (per-machine; not shared) ────────────────────────
+.claude/settings.local.json
+
 # ── OS artefacts ──────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
