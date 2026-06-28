@@ -7,7 +7,7 @@ You are an agent that helps to develop a software tool that is able to automate 
 ## General guidelines for files and folder structures
 All the markdown documents like AGENTS.md will be located in "docs" folder.
 
-All the python scripts and jupyter notebook will be located in "src" folder.
+All the python scripts and jupyter notebook will be located in "src" folder. Notebooks specifically are placed in `src/notebooks/`.
 
 The "database" folder will contain a list of subfolders with specific name that user defines. For example, "FP11_BLTC" means a package called "FP11" that has undergoes "BLTC" (board-level temperature-cycling test). Within each subfolder, there are at least 2 folders called "images" and "coordinates".
 "images" folder contains one or more images of the bottom-view of BGA package dye and pry results. Each image shows the BGA array that should match the coordinates for the package's coordinates file within "coordinates" folder. Note that in the dye and pry image within "images" folder, it shows the bottom view of a package so the reference point of the package is located at top right corner in the image while in the coordinates file, it shows the BGA coordinates of the package with top-down view so the reference point of the package is at top-left corner for coordinates file. Take note of this and apply any coordinates transformation as necessary later when processing the results.
@@ -47,7 +47,8 @@ You can use any open-source image-processing AI models like (U-net, YOLO, ResNet
 - Coordinate units are **micrometers (µm)**; no explicit unit field exists in the coordinate file.
 - Row 2 of the coordinate Excel sheet is always blank and must be skipped when reading.
 - The coordinate file uses a **top-down view** (reference corner = top-left), while the dye-and-pry images use a **bottom view** (reference corner = top-right). The required spatial transform is a horizontal mirror: `x_bv = -X_coord`, `y_bv = Y_coord`.
-- The physical field-of-view (µm per pixel) of the 20× images is not known in advance and must be derived from the detected ball positions during image registration.
+- ✅ **Confirmed (notebook 01):** 2 077 balls, 63 × 77 grid, 800 µm pitch, array extents 34 900 × 42 400 µm.
+- **Preliminary scale estimate (from Step 1.3 image characterisation):** ~0.205 px/µm; exact affine calibration (including per-image margins ~350–425 px) to be computed in `02_image_registration.ipynb`.
 - **No ground-truth labels exist yet.** Numerical accuracy validation will only be possible after the tool is built and manual labelling is performed in a separate step.
 - **Category thresholds** (crack area as a percentage of total ball area):
   - Category A: exactly 0%
@@ -124,13 +125,15 @@ You can use any open-source image-processing AI models like (U-net, YOLO, ResNet
 
 - [x] **2.3 Image registration strategy**
   1. Detect solder ball centre positions in the full image using Hough circle transform or blob detection.
+     - Hough parameters (validated in Step 1.2): `dp=1.5`, `param1=60`, `param2=25`, `minRadius=60`, `maxRadius=130` (full-res); detect on 4× downsampled image for speed then scale back.
+     - Typical yield: **887–1 102** circles detected per image (out of 2 077; edge/fused balls account for the rest).
   2. Match detected centres to the transformed coordinate grid using nearest-neighbour assignment and RANSAC to reject outliers.
   3. Compute an affine transform (or homography if lens distortion is present) mapping µm coordinates to pixel coordinates.
   4. Validate: RMSE of predicted centres vs. detected centres < 5 px (MVP); target < 2 px for production.
   5. Fallback: if automatic detection fails, provide a notebook cell for manual corner annotation.
 
 - [x] **2.4 Crack segmentation approach**
-  - Crop a fixed-size ROI (e.g. 200 × 200 px) centred on each ball's pixel coordinate.
+  - Crop a fixed-size ROI of **256 × 256 px** centred on each ball's pixel coordinate (confirmed in Step 1.3: typical ball diameter ~210–220 px, so 256 px gives a comfortable border).
   - Run each ROI through a pre-trained U-Net (e.g. `segmentation-models-pytorch` with an ImageNet-pretrained encoder).
   - Post-process the binary mask with morphological operations (opening/closing) to remove noise.
   - Crack fraction = (crack pixels inside ball circle) / (ball interior pixels).
@@ -176,8 +179,10 @@ Populate `LLM_GATEWAY_KEY` in the existing `.env` file at the project root befor
 
 **Notebooks in `src/notebooks/`:**
 
-- [ ] **3.1 `01_coordinate_exploration.ipynb`**
+- [x] **3.1 `01_coordinate_exploration.ipynb`** *(all sanity checks passed)*
   Load and inspect the coordinate xlsx. Apply the mirror transform. Visualise the ball grid on a scatter plot. Confirm expected ball count (2 077).
+  - **Results:** 2 077 balls ✅ · 63 × 77 grid ✅ · 800 µm pitch ✅ · 0 missing values ✅ · X symmetry ✅
+  - Grid scatter plots (top-down and bottom-view orientations) generated and verified visually.
 
 - [ ] **3.2 `02_image_registration.ipynb`**
   Load one image. Detect ball centres (Hough circles). Match to transformed coordinates. Compute and display the affine transform. Report RMSE.
@@ -196,10 +201,12 @@ Populate `LLM_GATEWAY_KEY` in the existing `.env` file at the project root befor
 
 ### Step 4: Test
 
-- [ ] **4.1 Coordinate sanity checks (notebook 01)**
-  - Confirm row count after skipping blank row: expect 2 077 balls.
-  - Confirm the mirrored X range is the negative of the original X range.
-  - Visually verify the scatter plot has the expected grid pattern.
+- [x] **4.1 Coordinate sanity checks (notebook 01)** *(all passed)*
+  - Ball count: **2 077** ✅
+  - X range: −17 450 to +17 450 µm (symmetric) ✅
+  - Grid: 63 unique X × 77 unique Y positions, pitch 800 µm (X and Y) ✅
+  - Missing values: **0** ✅
+  - Scatter plots confirmed correct grid pattern and mirror orientation ✅
 
 - [ ] **4.2 Registration quality check (notebook 02)**
   - Compute RMSE between predicted and detected ball centres.
