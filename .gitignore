@@ -29,8 +29,9 @@ build/
 # (kept out of version control; re-generate from notebooks)
 **/output/*_BGA_label_output.xlsx
 
-# ── Generated validation artefacts (re-generate from notebook 02) ────────────
+# ── Generated validation artefacts (re-generate from notebooks) ──────────────
 **/output/overlays/
+**/output/rois/
 
 # ── Local Claude Code state (per-machine; not shared) ────────────────────────
 .claude/settings.local.json
