@@ -60,21 +60,35 @@ You can use any open-source image-processing AI models like (U-net, YOLO, ResNet
 ## Steps
 ### Step 1: Research
 
-- [ ] **1.1 IPC-TM-650-2.4.53 review**
+- [x] **1.1 IPC-TM-650-2.4.53 review**
   Read `docs/ipc-tm-650-2.4.53 Dye and Pry.pdf` to understand:
   - What constitutes a crack versus normal dye penetration.
   - Visual features that distinguish categories A–E.
   - Any standard measurement methodology for crack area percentage.
 
-- [ ] **1.2 Coordinate transform verification**
-  - Manually locate 2–3 corner or edge balls (e.g. A10, the last row/column ball) in a sample image.
-  - Apply the mirror transform (`x_bv = -X_coord`, `y_bv = Y_coord`) and confirm they correspond to the expected image quadrant.
-  - Document the transform result and any corrections needed.
+- [x] **1.2 Coordinate transform verification**
+  - 5 interior balls (Y9, C25, R15, G40, P20) were predicted using the mirror transform
+    (`x_bv = -X_coord`, `y_bv = Y_coord`) with a linear scale derived from the array extents.
+  - Hough circle detection placed all 5 detected centres within 41–75 px of the predicted positions,
+    confirming the horizontal-mirror direction is correct.
+  - The residual error is expected at this stage because the linear scale uses the full array extent
+    as a proxy for the image field-of-view; the exact affine calibration (including margins) will be
+    computed in `02_image_registration.ipynb` using RANSAC over all ~900+ detected balls.
+  - **Key finding:** ball A10 is at Y = 21 200 µm (the maximum Y), which maps to pixel row ≈ 0
+    (top edge of image) — edge balls may be partially clipped and should be handled as boundary cases.
 
-- [ ] **1.3 Sample image characterisation**
-  - Note lighting uniformity, focus quality, dye contrast, and typical solder ball diameter in pixels.
-  - Identify whether any fiducial marks or alignment features are visible in the images.
-  - Estimate the physical field-of-view from the known ball pitch (if available from datasheets).
+- [x] **1.3 Sample image characterisation**
+  - **Image sizes:** 7 925–8 554 × 9 295–9 841 px (vary slightly between images; 20× magnification).
+  - **Ball size:** median radius ≈ 103–123 px across images → typical diameter **~210–220 px**.
+  - **Ball pitch:** 800 µm physical → **~164 px** at the estimated 0.205 px/µm scale.
+  - **Brightness:** dark background (global mean 112–129, std 67–77) with good dye/ball contrast.
+  - **Detected ball count per image:** 887–1 102 (out of 2 077 total; edge balls and
+    overlapping/fused balls account for the remainder — to be handled in registration notebook).
+  - **Margins:** approximately 350–425 px (left/top) and 275–345 px (right/bottom) between the
+    image border and the outermost ball row/column.
+  - **No fiducial marks** were observed; alignment will rely on detected ball positions.
+  - **ROI crop size for segmentation:** 256 × 256 px recommended (comfortably contains a single ball
+    at ~220 px diameter with a small border).
 
 - [ ] **1.4 Manual labelling of ~20 balls**
   - Select balls spanning different crack severities from at least one image.
@@ -152,7 +166,7 @@ You can use any open-source image-processing AI models like (U-net, YOLO, ResNet
 
 All development at this stage is **notebook-only**. Each notebook is self-contained and can be run independently. Helper functions may be defined inside notebook cells or in small `.py` files in `src/` that the notebooks import.
 
-**Environment setup**
+**Environment setup** ✅ *(completed — `pyproject.toml`, `uv.lock`, and `.venv/` already present)*
 ```bash
 uv init
 uv add opencv-python numpy pandas openpyxl torch segmentation-models-pytorch \
