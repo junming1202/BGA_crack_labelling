@@ -60,108 +60,97 @@ You can use any open-source image-processing AI models like (U-net, YOLO, ResNet
 ## Steps
 ### Step 1: Research
 
-**1.1 IPC-TM-650-2.4.53 review**
-Read `docs/ipc-tm-650-2.4.53 Dye and Pry.pdf` to understand:
-- What constitutes a crack versus normal dye penetration.
-- Visual features that distinguish categories A–E.
-- Any standard measurement methodology for crack area percentage.
+- [ ] **1.1 IPC-TM-650-2.4.53 review**
+  Read `docs/ipc-tm-650-2.4.53 Dye and Pry.pdf` to understand:
+  - What constitutes a crack versus normal dye penetration.
+  - Visual features that distinguish categories A–E.
+  - Any standard measurement methodology for crack area percentage.
 
-**1.2 Coordinate transform verification**
-- Manually locate 2–3 corner or edge balls (e.g. A10, the last row/column ball) in a sample image.
-- Apply the mirror transform (`x_bv = -X_coord`, `y_bv = Y_coord`) and confirm they correspond to the expected image quadrant.
-- Document the transform result and any corrections needed.
+- [ ] **1.2 Coordinate transform verification**
+  - Manually locate 2–3 corner or edge balls (e.g. A10, the last row/column ball) in a sample image.
+  - Apply the mirror transform (`x_bv = -X_coord`, `y_bv = Y_coord`) and confirm they correspond to the expected image quadrant.
+  - Document the transform result and any corrections needed.
 
-**1.3 Sample image characterisation**
-- Note lighting uniformity, focus quality, dye contrast, and typical solder ball diameter in pixels.
-- Identify whether any fiducial marks or alignment features are visible in the images.
-- Estimate the physical field-of-view from the known ball pitch (if available from datasheets).
+- [ ] **1.3 Sample image characterisation**
+  - Note lighting uniformity, focus quality, dye contrast, and typical solder ball diameter in pixels.
+  - Identify whether any fiducial marks or alignment features are visible in the images.
+  - Estimate the physical field-of-view from the known ball pitch (if available from datasheets).
 
-**1.4 Manual labelling of ~20 balls**
-- Select balls spanning different crack severities from at least one image.
-- Record the ball ID, estimated crack percentage, and assigned category.
-- Use these as a qualitative reference during classifier development.
+- [ ] **1.4 Manual labelling of ~20 balls**
+  - Select balls spanning different crack severities from at least one image.
+  - Record the ball ID, estimated crack percentage, and assigned category.
+  - Use these as a qualitative reference during classifier development.
 
-**1.5 Literature review (summary)**
-- **Crack segmentation:** U-Net with encoder-decoder architecture and skip connections outperforms YOLO and ResNet for pixel-level crack segmentation (dice score ≈ 0.66 on benchmark datasets).
-- **Ball detection / image registration:** OpenCV SIFT keypoint matching + FLANN + RANSAC homography is standard for sub-pixel alignment of PCB images.
-- **BGA defect detection:** YOLO-APGC achieves 99.2% accuracy on BGA surface defect classification tasks.
+- [x] **1.5 Literature review (summary)**
+  - **Crack segmentation:** U-Net with encoder-decoder architecture and skip connections outperforms YOLO and ResNet for pixel-level crack segmentation (dice score ≈ 0.66 on benchmark datasets).
+  - **Ball detection / image registration:** OpenCV SIFT keypoint matching + FLANN + RANSAC homography is standard for sub-pixel alignment of PCB images.
+  - **BGA defect detection:** YOLO-APGC achieves 99.2% accuracy on BGA surface defect classification tasks.
 
 ### Step 2: Plan
 
-**2.1 Pipeline overview**
-```
-coordinates.xlsx
-  └─ parse + mirror transform → bottom-view coords (µm)
-       └─ image registration (SIFT + RANSAC)
-            └─ µm → pixel transform per image
-                 └─ ROI extraction per ball (~200 px diameter crop)
-                      └─ crack segmentation (U-Net)
-                           └─ crack area fraction → category A–E
-                                └─ <package>_BGA_label_output.xlsx
-```
+- [x] **2.1 Pipeline overview**
+  ```
+  coordinates.xlsx
+    └─ parse + mirror transform → bottom-view coords (µm)
+         └─ image registration (SIFT + RANSAC)
+              └─ µm → pixel transform per image
+                   └─ ROI extraction per ball (~200 px diameter crop)
+                        └─ crack segmentation (U-Net)
+                             └─ crack area fraction → category A–E
+                                  └─ <package>_BGA_label_output.xlsx
+  ```
 
-**2.2 Coordinate transform**
-```python
-# From top-down view (coordinate file) to bottom-view (image space)
-x_bv = -X_coord   # horizontal mirror
-y_bv =  Y_coord   # no change
-```
-Scale from µm to pixels is determined during image registration (2.3).
+- [x] **2.2 Coordinate transform**
+  ```python
+  # From top-down view (coordinate file) to bottom-view (image space)
+  x_bv = -X_coord   # horizontal mirror
+  y_bv =  Y_coord   # no change
+  ```
+  Scale from µm to pixels is determined during image registration (2.3).
 
-**2.3 Image registration strategy**
-1. Detect solder ball centre positions in the full image using Hough circle transform or blob detection.
-2. Match detected centres to the transformed coordinate grid using nearest-neighbour assignment and RANSAC to reject outliers.
-3. Compute an affine transform (or homography if lens distortion is present) mapping µm coordinates to pixel coordinates.
-4. Validate: RMSE of predicted centres vs. detected centres < 5 px (MVP); target < 2 px for production.
-5. Fallback: if automatic detection fails, provide a notebook cell for manual corner annotation.
+- [x] **2.3 Image registration strategy**
+  1. Detect solder ball centre positions in the full image using Hough circle transform or blob detection.
+  2. Match detected centres to the transformed coordinate grid using nearest-neighbour assignment and RANSAC to reject outliers.
+  3. Compute an affine transform (or homography if lens distortion is present) mapping µm coordinates to pixel coordinates.
+  4. Validate: RMSE of predicted centres vs. detected centres < 5 px (MVP); target < 2 px for production.
+  5. Fallback: if automatic detection fails, provide a notebook cell for manual corner annotation.
 
-**2.4 Crack segmentation approach**
-- Crop a fixed-size ROI (e.g. 200 × 200 px) centred on each ball's pixel coordinate.
-- Run each ROI through a pre-trained U-Net (e.g. `segmentation-models-pytorch` with an ImageNet-pretrained encoder).
-- Post-process the binary mask with morphological operations (opening/closing) to remove noise.
-- Crack fraction = (crack pixels inside ball circle) / (ball interior pixels).
-- Map fraction to category using thresholds from the Assumptions section.
+- [x] **2.4 Crack segmentation approach**
+  - Crop a fixed-size ROI (e.g. 200 × 200 px) centred on each ball's pixel coordinate.
+  - Run each ROI through a pre-trained U-Net (e.g. `segmentation-models-pytorch` with an ImageNet-pretrained encoder).
+  - Post-process the binary mask with morphological operations (opening/closing) to remove noise.
+  - Crack fraction = (crack pixels inside ball circle) / (ball interior pixels).
+  - Map fraction to category using thresholds from the Assumptions section.
 
-**2.5 LLM assistance (optional, later)**
-- The AMD gateway (`Claude-Opus-4.8` via OpenAI-compatible API) may be used for edge-case validation: pass a base64-encoded ball crop with a prompt asking for crack severity, and use the response as a second opinion when the segmentation confidence is low.
-- The LLM is **not** the primary classifier; it is an optional post-processing step.
-- Use the LLM setup code provided in the **Available resources** section above.
+- [x] **2.5 LLM assistance (optional, later)**
+  - The AMD gateway (`Claude-Opus-4.8` via OpenAI-compatible API) may be used for edge-case validation: pass a base64-encoded ball crop with a prompt asking for crack severity, and use the response as a second opinion when the segmentation confidence is low.
+  - The LLM is **not** the primary classifier; it is an optional post-processing step.
+  - Use the LLM setup code provided in the **Available resources** section above.
 
-**2.6 Technology stack**
-```
-python             ≥ 3.11
-uv                 environment management
-opencv-python      image processing (Hough circles, SIFT, RANSAC, morphology)
-numpy              array operations
-pandas             coordinate data handling
-openpyxl           read/write xlsx
-torch              deep learning backend
-segmentation-models-pytorch  pre-trained U-Net encoder-decoders
-openai             AMD LLM gateway (optional)
-python-dotenv      .env key loading
-jupyterlab         notebook environment
-matplotlib         visualisation inside notebooks
-```
+- [x] **2.6 Technology stack**
+  ```
+  python             ≥ 3.11
+  uv                 environment management
+  opencv-python      image processing (Hough circles, SIFT, RANSAC, morphology)
+  numpy              array operations
+  pandas             coordinate data handling
+  openpyxl           read/write xlsx
+  torch              deep learning backend
+  segmentation-models-pytorch  pre-trained U-Net encoder-decoders
+  openai             AMD LLM gateway (optional)
+  python-dotenv      .env key loading
+  jupyterlab         notebook environment
+  matplotlib         visualisation inside notebooks
+  ```
 
-**2.7 Output file specification**
-- Path: `database/<package>/output/<package>_BGA_label_output.xlsx`
-- Columns: `BGA Number`, `X Coord`, `Y Coord`, then one column per image (named after the image filename, without extension) containing the category letter (A–E) for every ball.
-- Row order: same as the source coordinate file.
+- [x] **2.7 Output file specification**
+  - Path: `database/<package>/output/<package>_BGA_label_output.xlsx`
+  - Columns: `BGA Number`, `X Coord`, `Y Coord`, then one column per image (named after the image filename, without extension) containing the category letter (A–E) for every ball.
+  - Row order: same as the source coordinate file.
 
 ### Step 3: Build
 
 All development at this stage is **notebook-only**. Each notebook is self-contained and can be run independently. Helper functions may be defined inside notebook cells or in small `.py` files in `src/` that the notebooks import.
-
-**Recommended notebook sequence in `src/notebooks/`:**
-
-| Notebook | Purpose |
-|---|---|
-| `01_coordinate_exploration.ipynb` | Load and inspect the coordinate xlsx. Apply the mirror transform. Visualise the ball grid on a scatter plot. Confirm expected ball count (2 077). |
-| `02_image_registration.ipynb` | Load one image. Detect ball centres (Hough circles). Match to transformed coordinates. Compute and display the affine transform. Report RMSE. |
-| `03_roi_extraction.ipynb` | Using the registration from notebook 02, crop ROIs for a sample of balls. Display a grid of crops to visually verify alignment. |
-| `04_segmentation_prototype.ipynb` | Load a pre-trained U-Net. Run inference on sample ROIs. Display the binary crack mask overlay on each crop. Compute crack fraction. |
-| `05_classification.ipynb` | Apply the category thresholds to crack fractions. Display the distribution of categories across one image. |
-| `06_end_to_end_demo.ipynb` | Run the full pipeline (notebooks 01–05 steps combined) on all 5 images. Write the output xlsx. Display a summary table and annotated image overlay. |
 
 **Environment setup**
 ```bash
@@ -169,34 +158,54 @@ uv init
 uv add opencv-python numpy pandas openpyxl torch segmentation-models-pytorch \
         openai python-dotenv jupyterlab matplotlib
 ```
-Copy `.env.example` to `.env` and populate `LLM_GATEWAY_KEY` with your AMD gateway key before running any LLM-related cells.
+Populate `LLM_GATEWAY_KEY` in the existing `.env` file at the project root before running any LLM-related cells.
+
+**Notebooks in `src/notebooks/`:**
+
+- [ ] **3.1 `01_coordinate_exploration.ipynb`**
+  Load and inspect the coordinate xlsx. Apply the mirror transform. Visualise the ball grid on a scatter plot. Confirm expected ball count (2 077).
+
+- [ ] **3.2 `02_image_registration.ipynb`**
+  Load one image. Detect ball centres (Hough circles). Match to transformed coordinates. Compute and display the affine transform. Report RMSE.
+
+- [ ] **3.3 `03_roi_extraction.ipynb`**
+  Using the registration from notebook 02, crop ROIs for a sample of balls. Display a grid of crops to visually verify alignment.
+
+- [ ] **3.4 `04_segmentation_prototype.ipynb`**
+  Load a pre-trained U-Net. Run inference on sample ROIs. Display the binary crack mask overlay on each crop. Compute crack fraction.
+
+- [ ] **3.5 `05_classification.ipynb`**
+  Apply the category thresholds to crack fractions. Display the distribution of categories across one image.
+
+- [ ] **3.6 `06_end_to_end_demo.ipynb`**
+  Run the full pipeline (notebooks 01–05 steps combined) on all 5 images. Write the output xlsx. Display a summary table and annotated image overlay.
 
 ### Step 4: Test
 
-**4.1 Coordinate sanity checks (notebook 01)**
-- Confirm row count after skipping blank row: expect 2 077 balls.
-- Confirm the mirrored X range is the negative of the original X range.
-- Visually verify the scatter plot has the expected grid pattern.
+- [ ] **4.1 Coordinate sanity checks (notebook 01)**
+  - Confirm row count after skipping blank row: expect 2 077 balls.
+  - Confirm the mirrored X range is the negative of the original X range.
+  - Visually verify the scatter plot has the expected grid pattern.
 
-**4.2 Registration quality check (notebook 02)**
-- Compute RMSE between predicted and detected ball centres.
-- Gate: RMSE < 5 px required to proceed; flag image if RMSE > 5 px and inspect manually.
-- Check that the detected ball count is close to 2 077 (some edge balls may be clipped).
+- [ ] **4.2 Registration quality check (notebook 02)**
+  - Compute RMSE between predicted and detected ball centres.
+  - Gate: RMSE < 5 px required to proceed; flag image if RMSE > 5 px and inspect manually.
+  - Check that the detected ball count is close to 2 077 (some edge balls may be clipped).
 
-**4.3 ROI alignment spot-check (notebook 03)**
-- Visually inspect a random sample of 20 crops and confirm each is centred on a solder ball.
-- Check boundary crops (balls near the image edge) for partial occlusion.
+- [ ] **4.3 ROI alignment spot-check (notebook 03)**
+  - Visually inspect a random sample of 20 crops and confirm each is centred on a solder ball.
+  - Check boundary crops (balls near the image edge) for partial occlusion.
 
-**4.4 Segmentation visual validation (notebook 04)**
-- Display segmentation masks for the ~20 manually labelled balls from Step 1.4.
-- Compare assigned categories to the manual labels as a qualitative (not numerical) check.
-- Note: numerical accuracy cannot be computed until ground-truth labels are collected in a separate labelling step after the tool is built.
+- [ ] **4.4 Segmentation visual validation (notebook 04)**
+  - Display segmentation masks for the ~20 manually labelled balls from Step 1.4.
+  - Compare assigned categories to the manual labels as a qualitative (not numerical) check.
+  - Note: numerical accuracy cannot be computed until ground-truth labels are collected in a separate labelling step after the tool is built.
 
-**4.5 End-to-end output check (notebook 06)**
-- Verify the output xlsx is created at the correct path.
-- Verify it has exactly 2 077 rows and 5 image columns (for the FP11_BLTC package).
-- Verify no `NaN` or missing values in any category column.
-- Verify all values are one of: A, B, C, D, E.
+- [ ] **4.5 End-to-end output check (notebook 06)**
+  - Verify the output xlsx is created at the correct path.
+  - Verify it has exactly 2 077 rows and 5 image columns (for the FP11_BLTC package).
+  - Verify no `NaN` or missing values in any category column.
+  - Verify all values are one of: A, B, C, D, E.
 
 **4.6 Open validation items (to be addressed after ground-truth labelling)**
 - Quantitative accuracy (per-category precision/recall) requires manually labelled reference data.
